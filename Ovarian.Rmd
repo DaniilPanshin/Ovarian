@@ -1,0 +1,85 @@
+---
+title: "Ovarin"
+author: "Danil Panshin"
+date: "3/10/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r message=FALSE, warning=FALSE}
+if (!require("pacman")) install.packages("pacman") 
+pacman::p_load(survminer, survival, dplyr)
+library(survminer)
+library(survival)
+library(dplyr)
+```
+
+
+#Преобразуем будущие ковариаты в факторы
+
+```{r warning=FALSE}
+ova <- ovarian
+ova$rx <- factor(ova$rx, 
+                     levels = c("1", "2"), 
+                     labels = c("A", "B"))
+
+ova$resid.ds <- factor(ova$resid.ds, 
+                           levels = c("1", "2"), 
+                           labels = c("no", "yes"))
+ova$ecog.ps <- factor(ova$ecog.ps, 
+                          levels = c("1", "2"), 
+                          labels = c("good", "bad"))
+
+```
+
+#Построим кривую Каплана-Мейра зависимости времени, от метода лечения
+
+```{r warning=FALSE}
+
+surv_object <- Surv(time = ova$futime, event = ova$fustat)
+fit1 <- survfit(surv_object ~ rx, data = ova)
+summary(fit1)
+```
+
+```{r warning=FALSE}
+ggsurvplot(fit1, data = ovarian, pval = TRUE)
+```
+#Построим кривую выживаемости зависимости времени от resid.ds (насколько я понял, наличия метастазов)
+Как видно есть существенное различие в выживании пациентов двух груб, но значимого различия всё же достичь не удаётся.
+Тоже самое можно сказать и про другие ковариаты. 
+
+```{r warning=FALSE}
+fit2 <- survfit(surv_object ~ resid.ds, data = ovarian)
+ggsurvplot(fit2, data = ovarian, pval = TRUE)
+```
+Кривая выжиаемости с ecog.ps
+```{r}
+fit3 <- survfit(surv_object ~  ecog.ps, data = ova)
+ggsurvplot(fit2, data = ova, pval = TRUE)
+
+```
+
+#Оценка факторов влияющих на риск
+построим модел пропорциональных рисков Кокса. Я также решил создать факторную переменную, включающую разделение 
+пациентов по возрасту на "молодых" и "старых", я разделил их по медиане, возможно это не совсем правильно
+
+
+
+```{r warning=FALSE}
+
+median(ova$age)
+
+ova <- ova %>% mutate(age_group = ifelse(age >=56.16544, "old", "young"))
+
+fit.coxph <- coxph(surv_object ~ rx + resid.ds +age_group +ecog.ps, data = ova)
+ggforest(fit.coxph, data = ova)
+
+
+```
+
+По данной диаграмме мы например можем понять, что пациенты с метастазами умирали имеют более всокий риск смерти, 
+чем без метастазов, тоже самое можно сказать и про другие ковариаты. Как показано на рафике, соответствующий 95% доверительный интервал составляет 0,071–0,89, и этот результат не является значимым
+
